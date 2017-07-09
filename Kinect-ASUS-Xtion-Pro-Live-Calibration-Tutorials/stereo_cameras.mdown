@@ -1,0 +1,118 @@
+# Stereo Camera Usage in ROS
+
+## Driver Installation
+
+There are many drivers for cameras in ROS. [Here](http://wiki.ros.org/Sensors/Cameras) list a bunch of camera drivers for your reference.
+
+### usb_cam
+
+We use `usb_cam` for now.
+
+```bash
+mkdir -p ~/catkin_stereo/src
+cd ~/catkin_stereo/src
+git clone https://github.com/bosch-ros-pkg/usb_cam.git
+catkin_init_workspace 
+cd ..
+caktin_make
+echo "source ~/catkin_stereo/devel/setup.bash">>~/.bashrc
+source ~/catkin_stereo/devel/setup.bash
+cd ~/catkin_stereo/src/usb_cam/launch
+touch stereo_cameras.launch
+```
+Copy following contents into `stereo_cameras.launch`
+
+```bash
+<launch>
+  <node name="usb_cam_left" pkg="usb_cam" type="usb_cam_node" output="screen" >
+    <param name="video_device" value="/dev/video0" />
+    <param name="image_width" value="640" />
+    <param name="image_height" value="480" />
+    <param name="pixel_format" value="yuyv" />
+    <param name="camera_frame_id" value="usb_cam_left" />
+    <param name="io_method" value="mmap"/>
+  </node>
+  <node name="usb_cam_right" pkg="usb_cam" type="usb_cam_node" output="screen" >
+    <param name="video_device" value="/dev/video1" />
+    <param name="image_width" value="640" />
+    <param name="image_height" value="480" />
+    <param name="pixel_format" value="yuyv" />
+    <param name="camera_frame_id" value="usb_cam_right" />
+    <param name="io_method" value="mmap"/>
+  </node>
+</launch>
+```
+
+To launch the driver for stereo cameras:
+```bash
+roslaunch usb_cam stereo_cameras.launch 
+```
+
+This will generate the following topics:
+```bash
+/rosout
+/rosout_agg
+/usb_cam_left/camera_info
+/usb_cam_left/image_raw
+/usb_cam_left/image_raw/compressed
+/usb_cam_left/image_raw/compressed/parameter_descriptions
+/usb_cam_left/image_raw/compressed/parameter_updates
+/usb_cam_left/image_raw/compressedDepth
+/usb_cam_left/image_raw/compressedDepth/parameter_descriptions
+/usb_cam_left/image_raw/compressedDepth/parameter_updates
+/usb_cam_left/image_raw/theora
+/usb_cam_left/image_raw/theora/parameter_descriptions
+/usb_cam_left/image_raw/theora/parameter_updates
+/usb_cam_right/camera_info
+/usb_cam_right/image_raw
+/usb_cam_right/image_raw/compressed
+/usb_cam_right/image_raw/compressed/parameter_descriptions
+/usb_cam_right/image_raw/compressed/parameter_updates
+/usb_cam_right/image_raw/compressedDepth
+/usb_cam_right/image_raw/compressedDepth/parameter_descriptions
+/usb_cam_right/image_raw/compressedDepth/parameter_updates
+/usb_cam_right/image_raw/theora
+/usb_cam_right/image_raw/theora/parameter_descriptions
+/usb_cam_right/image_raw/theora/parameter_updates
+```
+
+**Warning**: As you are launch two nodes separately here for left and right cameras, there is no ganrantee that these two cameras will output images synchronously. As a result, you will be very likely to see blank gui screen when you run `cameracalibrator.py`. So you need to add `--approximate=0.1`
+
+### uvc_camera (Recommended)
+
+Another driver you may choose is `uvc_camera`
+
+```bash
+sudo apt-get install libv4l-dev
+mkdir -p ~/catkin_stereo/src
+cd ~/catkin_stereo/src
+git clone https://github.com/ktossell/camera_umd.git
+catkin_init_workspace 
+cd ..
+caktin_make
+echo "source ~/catkin_stereo/devel/setup.bash">>~/.bashrc
+source ~/catkin_stereo/devel/setup.bash
+roslaunch uvc_camera stereo_node.launch
+```
+
+---
+
+## Calibration
+
+If you are using `usb_cam`: 
+```bash
+rosrun camera_calibration cameracalibrator.py --size 8x6 --square 0.0245 right:=/usb_cam_right/image_raw left:=/usb_cam_left/image_raw right_camera:=/usb_cam_right left_camera:=/usb_cam_left --approximate=0.1
+```
+
+If you are using `uvc_camera`:
+```bash
+rosrun camera_calibration cameracalibrator.py --size 8x6 --square 0.0245 right:=/right/image_raw left:=/left/image_raw right_camera:=/right left_camera:=/left
+```
+
+After calibration, results will be stored at `/tmp/calibrationdata.tar.gz`, extract it and copy the `left.yaml` and `right.yaml` to `~/catkin_stereo/src/camera_umd/uvc_camera` if you are using `uvc_camera` or `~/.ros/camera_info/` if you are using usb_cam`
+
+If you are using `uvc_camera`, change `left/camera_info_url` and `right/camera_info_url` into :
+```bash
+<param name="left/camera_info_url" type="string" value="file://$(find uvc_camera)/left.yaml" />
+<param name="right/camera_info_url" type="string" value="file://$(find uvc_camera)/right.yaml" />
+```
